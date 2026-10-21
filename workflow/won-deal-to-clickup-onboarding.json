@@ -1,0 +1,1899 @@
+{
+  "name": "Won Deal to ClickUp Client Onboarding",
+  "nodes": [
+    {
+      "id": "297013ed-8c73-59fd-a2e1-649938ae6d3b",
+      "name": "Note: Request",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -760
+      ],
+      "parameters": {
+        "content": "## 1. Check the request\nOnly requests with the shared secret get in. The deal is read from the generic JSON or the GoHighLevel shape and checked. Bad requests get a clear answer and stop.",
+        "width": 1120,
+        "height": 1920,
+        "color": 7
+      }
+    },
+    {
+      "id": "07f2b523-14ba-5cf4-b81a-77bd476aa505",
+      "name": "Note: Duplicates",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1060,
+        -760
+      ],
+      "parameters": {
+        "content": "## 2. No duplicates\nEach deal is remembered by its id. A deal that already has a list is never set up twice: this checks its own memory first, then looks in ClickUp for a list with the deal id in its name. A run that only needs to finish its setup or its email skips ahead on the middle line.",
+        "width": 1300,
+        "height": 1920,
+        "color": 4
+      }
+    },
+    {
+      "id": "76e15e66-fb8c-5e7e-8b0c-1da548396bbd",
+      "name": "Note: Create",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2380,
+        -760
+      ],
+      "parameters": {
+        "content": "## 3. Create the list from the template\nClickUp answers when the template is fully applied. If that call times out or fails, the list is looked up again before anything is called a failure, so a slow template never becomes two lists. Only when no list exists is the call tried once more.",
+        "width": 1080,
+        "height": 1920,
+        "color": 5
+      }
+    },
+    {
+      "id": "f9e7c122-d78a-520c-9899-3d3b0a072d25",
+      "name": "Note: Tasks",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3480,
+        -760
+      ],
+      "parameters": {
+        "content": "## 4. Kickoff tasks and custom fields\nTemplate tasks with a matching name are adjusted, missing ones are created. One change at a time, so a retry can never create a task twice. Package, start date and deal value go into the custom fields.",
+        "width": 1740,
+        "height": 1920,
+        "color": 6
+      }
+    },
+    {
+      "id": "55b3a9b8-252f-516e-a82e-d3f87b11b621",
+      "name": "Note: Notify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5240,
+        -760
+      ],
+      "parameters": {
+        "content": "## 5. Welcome email and Slack\nThe welcome email goes out through Postmark only when the whole setup worked. Slack gets the ClickUp link, or says exactly what exists and what failed. Failed runs end in a Stop node, which starts the error workflow.",
+        "width": 1920,
+        "height": 1920,
+        "color": 3
+      }
+    },
+    {
+      "id": "e79f4ff3-db31-5e8e-8f56-21c6c1cfd0df",
+      "name": "Deal Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ],
+      "webhookId": "f1f5c167-99a1-53ff-a4fd-fbe23f5c8931",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "won-deal-onboarding",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "22ca1082-113c-5e89-97d9-df8d3c52b740",
+      "name": "Check Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Every request must carry the shared secret from WEBHOOK_SECRET: in the X-Webhook-Secret header, or as the\n// custom data key webhook_secret (GoHighLevel's standard Webhook action cannot set headers).\n// An empty WEBHOOK_SECRET rejects everything, so a missing setting never leaves the door open.\nconst expected = String($env.WEBHOOK_SECRET || '');\nconst req = $input.first().json;\nconst fromHeader = req.headers?.['x-webhook-secret'];\nconst fromBody = req.body?.customData?.webhook_secret;\nconst given = typeof fromHeader === 'string' && fromHeader ? fromHeader : (typeof fromBody === 'string' ? fromBody : '');\n\n// Constant time comparison, so the response time does not reveal how much of a guess was right.\nfunction sameSecret(a, b) {\n  let diff = a.length ^ b.length;\n  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);\n  return diff === 0;\n}\nconst secretOk = expected.length > 0 && given.length > 0 && sameSecret(given, expected);\nreturn [{ json: { secretOk, secretSource: secretOk ? (given === fromHeader ? 'header' : 'customData') : 'none' }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "f2dd4bc1-e52a-55b9-9a6c-3f97a675bccb",
+      "name": "Secret Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "7d1b1d99-7a47-5096-a690-00c33c73f2a5",
+              "leftValue": "={{ $json.secretOk }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "016be2a3-b6af-559f-b52b-442d12b8381d",
+      "name": "Respond: Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'invalid or missing webhook secret' }) }}",
+        "options": {
+          "responseCode": "={{ 401 }}"
+        }
+      }
+    },
+    {
+      "id": "97da2f41-dd7f-53af-b4fb-d07b2d91e054",
+      "name": "Stop: Bad Secret",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        440,
+        780
+      ],
+      "parameters": {
+        "errorMessage": "Webhook call rejected: the shared secret is missing or wrong. If your CRM lands here, check WEBHOOK_SECRET and the X-Webhook-Secret header (or the webhook_secret custom data key)."
+      }
+    },
+    {
+      "id": "e03ac5f2-65d3-5627-a121-c0b44fd07813",
+      "name": "Normalize Deal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Dates are calendar days (YYYY-MM-DD). Due dates are sent to ClickUp as noon in the business time zone,\n// so the day shown is the same for everyone within 11 hours of that zone.\nconst utcNoon = ymd => { const [y, m, d] = ymd.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d, 12)); };\nconst isRealDate = ymd => /^\\d{4}-\\d{2}-\\d{2}$/.test(ymd) && utcNoon(ymd).toISOString().slice(0, 10) === ymd;\nconst isWeekend = ymd => [0, 6].includes(utcNoon(ymd).getUTCDay());\nfunction addBusinessDays(ymd, n) {\n  const d = utcNoon(ymd);\n  const step = n < 0 ? -1 : 1;\n  for (let left = Math.abs(n); left > 0;) {\n    d.setUTCDate(d.getUTCDate() + step);\n    if (d.getUTCDay() !== 0 && d.getUTCDay() !== 6) left--;\n  }\n  return d.toISOString().slice(0, 10);\n}\nfunction partsIn(tz, date) {\n  return Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit',\n    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(date).map(p => [p.type, p.value]));\n}\nfunction todayIn(tz) { const p = partsIn(tz, new Date()); return `${p.year}-${p.month}-${p.day}`; }\nfunction noonMs(ymd, tz) {\n  const guess = utcNoon(ymd).getTime();\n  const p = partsIn(tz, new Date(guess));\n  const local = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);\n  return guess - (local - guess);\n}\nconst shortDate = ymd => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(utcNoon(ymd));\nconst longDate = ymd => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(utcNoon(ymd));\n\n// Reads the webhook as one clean deal, whatever CRM sent it, and checks this workflow's settings.\n// Two shapes are understood: the generic JSON from the README, and the payload of GoHighLevel's workflow\n// Webhook action when the trigger is \"Opportunity Status Changed\" (contact fields, opportunity fields, customData).\nconst req = $('Deal Webhook').first().json;\nconst body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};\nconst text = (v, max = 200) => (v === undefined || v === null ? '' : String(v)).replace(/\\s+/g, ' ').trim().slice(0, max);\nconst WON = ['won', 'closed won', 'closed_won', 'closedwon'];\n\n// The generic shape wins when deal_id or client_name is present. (\"pipleline_stage\" is GoHighLevel's own spelling.)\nconst isGhl = !('deal_id' in body || 'client_name' in body) &&\n  ['opportunity_name', 'pipleline_stage', 'pipeline_id', 'contact_id'].some(k => k in body);\nconst custom = body.customData && typeof body.customData === 'object' ? body.customData : {};\nconst raw = isGhl ? {\n  source: 'GoHighLevel',\n  dealId: body.id || custom.deal_id,               // the opportunity id\n  status: body.status,\n  clientName: body.company_name || body.full_name || body.opportunity_name,\n  contactName: body.full_name || [body.first_name, body.last_name].filter(Boolean).join(' '),\n  email: body.email,\n  package: custom.package,\n  value: body.lead_value ?? custom.deal_value,\n  currency: custom.currency,\n  startDate: custom.start_date,\n} : {\n  source: text(body.source, 60) || 'a CRM webhook',\n  dealId: body.deal_id ?? body.id,\n  status: body.status ?? body.stage,\n  clientName: body.client_name ?? body.company,\n  contactName: body.contact_name,\n  email: body.contact_email ?? body.email,\n  package: body.package,\n  value: body.deal_value ?? body.value ?? body.amount,\n  currency: body.currency,\n  startDate: body.start_date,\n};\n\nconst status = text(raw.status, 40).toLowerCase();\nif (!WON.includes(status)) {\n  return [{ json: { valid: true, won: false, status, source: raw.source, deal: { id: text(raw.dealId, 64) } }, pairedItem: { item: 0 } }];\n}\n\n// Settings first: a broken setting affects every deal.\nconst cfgErrors = [];\nconst required = {\n  CLICKUP_API_TOKEN: $env.CLICKUP_API_TOKEN, CLICKUP_WORKSPACE_ID: $env.CLICKUP_WORKSPACE_ID, CLICKUP_TEMPLATE_ID: $env.CLICKUP_TEMPLATE_ID,\n  POSTMARK_SERVER_TOKEN: $env.POSTMARK_SERVER_TOKEN, POSTMARK_FROM: $env.POSTMARK_FROM, SLACK_WEBHOOK_URL: $env.SLACK_WEBHOOK_URL,\n};\nfor (const [key, value] of Object.entries(required)) if (!text(value)) cfgErrors.push(`${key} is not set`);\nif (!text($env.CLICKUP_SPACE_ID) && !text($env.CLICKUP_FOLDER_ID)) cfgErrors.push('set CLICKUP_SPACE_ID or CLICKUP_FOLDER_ID');\nif (text($env.CLICKUP_TEMPLATE_ID) && !/^t-\\S+$/.test(text($env.CLICKUP_TEMPLATE_ID))) cfgErrors.push('CLICKUP_TEMPLATE_ID must start with \"t-\"');\nconst tz = text($env.BUSINESS_TIMEZONE, 60) || 'UTC';\ntry { new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()); } catch (e) { cfgErrors.push(`BUSINESS_TIMEZONE \"${tz}\" is not a time zone`); }\nconst defaultDays = Number(text($env.DEFAULT_START_BUSINESS_DAYS) || 5);\nif (!Number.isInteger(defaultDays) || defaultDays < 0 || defaultDays > 60) cfgErrors.push('DEFAULT_START_BUSINESS_DAYS must be a whole number from 0 to 60');\n\nlet taskCfg = [];\n// The .env example wraps the JSON in single quotes. Docker Compose removes them, \"docker run --env-file\" does not,\n// so one pair of surrounding single quotes is accepted here.\nlet tasksRaw = String($env.KICKOFF_TASKS_JSON || '').trim();\nif (tasksRaw.length > 1 && tasksRaw.startsWith(\"'\") && tasksRaw.endsWith(\"'\")) tasksRaw = tasksRaw.slice(1, -1).trim();\ntry { taskCfg = JSON.parse(tasksRaw); } catch (e) { cfgErrors.push('KICKOFF_TASKS_JSON is not valid JSON'); }\nif (!Array.isArray(taskCfg) || taskCfg.length < 1 || taskCfg.length > 25) { cfgErrors.push('KICKOFF_TASKS_JSON must be a list of 1 to 25 tasks'); taskCfg = []; }\nconst seen = new Set();\ntaskCfg.forEach((t, i) => {\n  const where = `KICKOFF_TASKS_JSON task ${i + 1}`;\n  if (!t || typeof t !== 'object' || !text(t.name)) return cfgErrors.push(`${where} has no name`);\n  const key = text(t.name).toLowerCase();\n  if (seen.has(key)) cfgErrors.push(`${where}: the name \"${text(t.name)}\" is used twice`);\n  seen.add(key);\n  if (t.offset_days !== undefined && (!Number.isInteger(t.offset_days) || Math.abs(t.offset_days) > 120)) cfgErrors.push(`${where}: offset_days must be a whole number`);\n  if (t.assignees !== undefined && (!Array.isArray(t.assignees) || !t.assignees.every(a => Number.isInteger(a) && a > 0))) cfgErrors.push(`${where}: assignees must be a list of ClickUp user ids (numbers)`);\n  if (t.priority !== undefined && t.priority !== null && ![1, 2, 3, 4].includes(t.priority)) cfgErrors.push(`${where}: priority must be 1, 2, 3 or 4`);\n});\n\n// Then the deal itself.\nconst errors = [], warnings = [];\nconst dealId = text(raw.dealId, 64).replace(/[\\[\\]]/g, '');\nif (!dealId) errors.push('deal_id is missing');\nconst clientName = text(raw.clientName, 120);\nif (!clientName) errors.push('client_name is missing');\n\nif (cfgErrors.length || errors.length) {\n  const config = cfgErrors.length > 0;\n  return [{ json: {\n    valid: false, won: true, deal: { id: dealId, clientName },\n    response: config\n      ? { code: 500, body: { error: 'This workflow is not configured correctly. The details are in the n8n execution.' } }\n      : { code: 400, body: { error: 'The won deal could not be read.', details: errors } },\n    stopMessage: `Won deal ${dealId || '(no id)'}${clientName ? ' for ' + clientName : ''} was not processed. ` +\n      (config ? `Fix these settings: ${cfgErrors.join('; ')}.` : '') + (errors.length ? ` The payload has problems: ${errors.join('; ')}.` : ''),\n  }, pairedItem: { item: 0 } }];\n}\n\nconst contactName = text(raw.contactName, 120);\nlet email = text(raw.email, 254).toLowerCase();\nif (email && !/^[^\\s@<>,;\"]+@[^\\s@<>,;\"]+\\.[a-z]{2,}$/i.test(email)) { warnings.push(`\"${email}\" is not a valid email address`); email = ''; }\nlet value = null;\nif (raw.value !== undefined && raw.value !== null && raw.value !== '') {\n  const n = typeof raw.value === 'number' ? raw.value : Number(String(raw.value).replace(/[^0-9.\\-]/g, ''));\n  if (Number.isFinite(n) && String(raw.value).match(/\\d/)) value = Math.round(n * 100) / 100;\n  else warnings.push(`Deal value \"${text(raw.value, 40)}\" is not a number, so it was left out`);\n}\nconst currency = /^[A-Za-z]{3}$/.test(text(raw.currency)) ? text(raw.currency).toUpperCase() : (text($env.DEFAULT_CURRENCY) || 'USD').toUpperCase();\nlet valueLabel = '';\nif (value !== null) { try { valueLabel = new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value); } catch (e) { valueLabel = `${value} ${currency}`; } }\n\nconst today = todayIn(tz);\nlet startYmd = text(raw.startDate, 40).slice(0, 10);\nif (!startYmd || !isRealDate(startYmd)) {\n  const given = startYmd;\n  startYmd = addBusinessDays(today, defaultDays);\n  warnings.push(given ? `Start date \"${given}\" could not be read, so it was set to ${shortDate(startYmd)}`\n                      : `No start date on the deal, so it was set to ${shortDate(startYmd)} (${defaultDays} business days from today)`);\n}\n\n// Every due date lands on a business day. Offsets other than 0 already skip weekends; a task on the start date\n// itself (offset 0) can still fall on a weekend when the CRM sends a Saturday or Sunday start, and a date that has\n// passed moves to today, which can be a weekend day too. Both then move on to the next business day.\nconst tasks = taskCfg.map(t => {\n  const planned = addBusinessDays(startYmd, t.offset_days || 0);\n  let dueYmd = planned, why = '';\n  if (dueYmd < today) { dueYmd = today; why = 'which has passed'; }\n  if (isWeekend(dueYmd)) { dueYmd = addBusinessDays(dueYmd, 1); why = why || 'which is on a weekend'; }\n  if (why) warnings.push(`\"${text(t.name)}\" would have been due ${shortDate(planned)}, ${why}, so it is due ${dueYmd === today ? 'today' : shortDate(dueYmd)}`);\n  return {\n    name: text(t.name), offsetDays: t.offset_days || 0, assignees: t.assignees || [], priority: t.priority || null,\n    description: text(t.description, 2000), inEmail: t.in_email === true, emailLabel: text(t.email_label) || text(t.name),\n    dueYmd, dueMs: noonMs(dueYmd, tz), dueLabel: shortDate(dueYmd), dueLong: longDate(dueYmd),\n  };\n});\n\nconst deal = {\n  id: dealId, source: raw.source, clientName, contactName, firstName: contactName.split(' ')[0] || '', email,\n  package: text(raw.package, 100), value, currency, valueLabel,\n  startYmd, startMs: noonMs(startYmd, tz), startLabel: shortDate(startYmd), startLong: longDate(startYmd),\n  listName: `${clientName} Onboarding [${dealId}]`, tasks,\n};\ndeal.listContent = `Client onboarding for ${clientName}. Won deal ${dealId} (from ${deal.source}). Package: ${deal.package || 'not given'}. ` +\n  `Value: ${valueLabel || 'not given'}. Start: ${deal.startLong}. Contact: ${contactName || 'not given'}${email ? ' (' + email + ')' : ''}.`;\n\nconst config = {\n  workspaceId: text($env.CLICKUP_WORKSPACE_ID), timezone: tz,\n  businessName: text($env.BUSINESS_NAME, 100), bookingUrl: text($env.KICKOFF_BOOKING_URL, 500),\n  from: text($env.POSTMARK_FROM, 200), replyTo: text($env.POSTMARK_REPLY_TO, 200), messageStream: text($env.POSTMARK_MESSAGE_STREAM, 60) || 'outbound',\n  fields: { package: text($env.CLICKUP_FIELD_PACKAGE) || 'Package', startDate: text($env.CLICKUP_FIELD_START_DATE) || 'Start Date',\n            dealValue: text($env.CLICKUP_FIELD_DEAL_VALUE) || 'Deal Value' },\n};\nreturn [{ json: { valid: true, won: true, status, source: deal.source, deal, config, warnings }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "c05bedec-2133-5f09-ab46-4d5238fe0ec0",
+      "name": "Valid Deal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "5facb8d9-c1b2-56ef-ac90-d14c91e246dd",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "39f1ebb2-a5a4-51e6-9245-f3f2f7c817ea",
+      "name": "Respond: Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.response.body) }}",
+        "options": {
+          "responseCode": "={{ $json.response.code }}"
+        }
+      }
+    },
+    {
+      "id": "28fc8c17-008f-56a9-8547-23085849f09d",
+      "name": "Stop: Rejected Deal",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        880,
+        780
+      ],
+      "parameters": {
+        "errorMessage": "={{ $json.stopMessage }}"
+      }
+    },
+    {
+      "id": "c774a474-ec19-5aa3-bf2a-d3d55da2d64f",
+      "name": "Check Deal State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// Decides what this webhook needs, from the deal's record in static data:\n//   create        a new won deal\n//   resume_setup  a list exists but its setup did not finish last time: finish it on the same list\n//   resume_email  the setup finished but the welcome email did not go out: send only the email\n//   duplicate     already done: do nothing\nconst n = $input.first().json;\nconst store = $getWorkflowStaticData('global');\n// Own properties only: a deal id like \"constructor\" must not find Object.prototype.constructor.\nconst deals = store.deals;\nconst rec = n.won && deals && Object.prototype.hasOwnProperty.call(deals, n.deal.id) ? deals[n.deal.id] : undefined;\n\nlet action;\nif (!n.won) action = 'ignore';\nelse if (!rec) action = 'create';\nelse if (rec.status === 'setup_incomplete' && rec.listId) action = 'resume_setup';\nelse if (rec.status === 'email_pending' && n.deal.email) action = 'resume_email';\nelse action = 'duplicate';\n\nconst response = action === 'ignore'\n  ? { code: 200, body: { status: 'ignored', reason: n.status ? `status is \"${n.status}\", only won deals start onboarding` : 'no status in the payload', deal_id: n.deal.id } }\n  : action === 'duplicate'\n    ? { code: 200, body: { status: 'duplicate', deal_id: n.deal.id, list_url: rec.listUrl || '' } }\n    : { code: 202, body: { status: 'accepted', deal_id: n.deal.id, action } };\n// \"complete\" lets an email only retry pass the Setup Complete? check: its setup finished on an earlier run.\nreturn [{ json: { ...n, action, record: rec || null, response, complete: action === 'resume_email' }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "a9cbc0d8-0389-5c02-a748-6e50e65dbbef",
+      "name": "Respond: Received",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.response.body) }}",
+        "options": {
+          "responseCode": "={{ $json.response.code }}"
+        }
+      }
+    },
+    {
+      "id": "d67a9209-9461-5011-8f05-f51cbc2181a0",
+      "name": "Route by State",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "3e865b77-ebc2-517e-aa6f-08ee319caaa1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "New deal"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "2eef4b00-57aa-508c-b00e-2b99b6d4b79d",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "resume_setup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Finish setup"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "5f985e80-9b02-5218-86f3-42b95a84fa8d",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "resume_email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Email only"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Nothing to do"
+        }
+      }
+    },
+    {
+      "id": "2e1d56c9-9582-537c-a073-7bdab8d99ad9",
+      "name": "Nothing To Do",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        560
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2a3263dc-4b15-52cc-80bf-99f5957b7ff6",
+      "name": "ClickUp: Find Existing List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.clickup.com/api/v2/' + ($env.CLICKUP_FOLDER_ID ? 'folder/' + $env.CLICKUP_FOLDER_ID : 'space/' + $env.CLICKUP_SPACE_ID) + '/list' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "archived",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "2abe2dad-2a85-54e1-9e87-b8304a58f5ea",
+      "name": "List Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "58446cac-1711-5f8c-8e02-be1aba0e527f",
+              "leftValue": "={{ ($json.lists || []).some(l => String(l.name || '').includes('[' + $('Check Deal State').first().json.deal.id + ']')) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d8e6ea64-776c-5405-9ca1-330354cf5b00",
+      "name": "Adopt Existing List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "// One record per deal in this workflow's static data. n8n saves it at the end of every production run.\n// Records are read and written as own properties only, so a deal id like \"constructor\" or \"__proto__\"\n// is an ordinary key and never an inherited object property.\nconst ownRecord = (deals, id) => (deals && Object.prototype.hasOwnProperty.call(deals, id) ? deals[id] : undefined);\nfunction writeDeals(store, entries) {\n  // Keep it small: forget deals nobody touched for 400 days, and keep at most 5,000.\n  const cutoff = Date.now() - 400 * 864e5;\n  store.deals = Object.fromEntries(entries\n    .filter(([, r]) => new Date(r.updatedAt).getTime() > cutoff)\n    .sort((a, b) => String(b[1].updatedAt).localeCompare(String(a[1].updatedAt)))\n    .slice(0, 5000));\n}\n// A key patched to undefined is removed, so a finished deal does not keep data only a retry needed.\nfunction saveRecord(dealId, patch) {\n  const store = $getWorkflowStaticData('global');\n  const others = Object.entries(store.deals || {}).filter(([k]) => k !== dealId);\n  const rec = { ...(ownRecord(store.deals, dealId) || {}), ...patch, updatedAt: new Date().toISOString() };\n  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];\n  writeDeals(store, [...others, [dealId, rec]]);\n}\nfunction forgetRecord(dealId) {\n  const store = $getWorkflowStaticData('global');\n  writeDeals(store, Object.entries(store.deals || {}).filter(([k]) => k !== dealId));\n}\n\n// ClickUp already has a list with this deal id in its name (made by an earlier run, or by hand).\n// Nothing is created and no email is sent. The deal is remembered, so the next copy stops even earlier.\nconst ctx = $('Check Deal State').first().json;\nconst tag = '[' + ctx.deal.id + ']';\nconst list = ($('ClickUp: Find Existing List').first().json.lists || []).find(l => String(l.name || '').includes(tag));\nconst listUrl = `https://app.clickup.com/${ctx.config.workspaceId}/v/li/${list.id}`;\nsaveRecord(ctx.deal.id, { status: 'done', adopted: true, listId: String(list.id), listUrl, listName: list.name });\nreturn [{ json: { report: { outcome: 'adopted', deal: ctx.deal, listId: String(list.id), listUrl, listName: list.name, warnings: [] } }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "de4b446e-2480-5434-8baa-8d8470a7f84f",
+      "name": "ClickUp: Create From Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.clickup.com/api/v2/' + ($env.CLICKUP_FOLDER_ID ? 'folder/' + $env.CLICKUP_FOLDER_ID : 'space/' + $env.CLICKUP_SPACE_ID) + '/list_template/' + $env.CLICKUP_TEMPLATE_ID }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('Check Deal State').first().json.deal.listName, options: { return_immediately: false, content: $('Check Deal State').first().json.deal.listContent, custom_fields: true, include_views: true, old_statuses: true, subtasks: true, old_checklists: true, old_tags: true, priority: true, automation: true, old_due_date: false, old_start_date: false } }) }}",
+        "options": {
+          "timeout": "={{ Number($env.CLICKUP_TEMPLATE_TIMEOUT_MS) || 90000 }}"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "2fb8de53-3b22-5200-a4c3-872b815cd808",
+      "name": "ClickUp: Find List Again",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -260
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.clickup.com/api/v2/' + ($env.CLICKUP_FOLDER_ID ? 'folder/' + $env.CLICKUP_FOLDER_ID : 'space/' + $env.CLICKUP_SPACE_ID) + '/list' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "archived",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "24159eb9-2055-5b3f-aee1-52b24c506f4d",
+      "name": "Was It Created?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -260
+      ],
+      "parameters": {
+        "jsCode": "// Turns an n8n HTTP error into one short line, for example \"401 Token invalid (OAUTH_025)\".\n// n8n puts the HTTP status in error.status and the response body in the message: 401 - \"{\\\"err\\\":...}\".\n// With pagination on, the status is in error.statusCode or error.response.status instead.\n// A timeout has no status, only code ECONNABORTED.\nfunction errorStatus(e) {\n  if (!e || typeof e !== 'object') return 0;\n  const s = Number(e.status || e.httpCode || e.statusCode || e.response?.status || (String(e.message || '').match(/^(\\d{3}) - /) || [])[1] || 0);\n  return Number.isFinite(s) ? s : 0;\n}\n// The API's own answer (ClickUp: {err, ECODE}, Postmark: {ErrorCode, Message}), parsed from wherever n8n put it.\nfunction errorBody(e) {\n  if (!e || typeof e !== 'object') return undefined;\n  let body = e.error ?? e.response?.body;\n  const quoted = String(e.message || '').match(/^\\d{3} - (\"[\\s\\S]*\")$/);\n  if (body === undefined && quoted) { try { body = JSON.parse(quoted[1]); } catch (x) {} }\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (x) {} }\n  return body;\n}\nfunction describeError(e) {\n  if (!e) return 'unknown error';\n  if (typeof e === 'string') return e.slice(0, 300);\n  const status = errorStatus(e);\n  const msg = String(e.message || '');\n  const body = errorBody(e);\n  let detail = '';\n  if (body && typeof body === 'object') {\n    if (body.err) detail = body.err + (body.ECODE ? ' (' + body.ECODE + ')' : '');\n    else if (body.Message) detail = body.Message + (body.ErrorCode !== undefined ? ' (Postmark error ' + body.ErrorCode + ')' : '');\n    else if (body.message) detail = String(body.message);\n  } else if (typeof body === 'string') detail = body.trim();\n  if (!detail) detail = e.code === 'ECONNABORTED' ? `no answer in time (${msg})` : (msg || e.code || 'no details');\n  return ((status ? status + ' ' : '') + detail).replace(/\\s+/g, ' ').trim().slice(0, 300);\n}\n\n// The template call failed or timed out. ClickUp keeps building a list from a template past a timeout, and\n// it refuses a second list with the same name. So before calling this a failure, look for the list again:\n//   recovered  the list exists and our call timed out or got a 5xx: ClickUp made it, carry on with it.\n//              Also a 4xx on the second try: that \"name taken\" is about the list from our own first try.\n//   taken      the list exists and our first call got a 4xx (usually \"name taken\"): another run is setting it up\n//   retry      no list, and the first call got no answer or a 5xx: nothing was created, so one more try is safe\n//   failed     no list after a 4xx (a wrong id or setting) or after the second try: nothing was created\nconst ctx = $('Check Deal State').first().json;\nconst attempt = $runIndex;   // 0 after the first template call, 1 after the retry\nlet createError;\ntry { createError = $('ClickUp: Create From Template').itemMatching(0).json.error; } catch (e) {}\nconst status = errorStatus(createError);\nconst tag = '[' + ctx.deal.id + ']';\nconst list = ($input.first().json.lists || []).find(l => String(l.name || '').includes(tag));\nconst clientSide = status >= 400 && status < 500;\nconst outcome = list ? (clientSide && attempt === 0 ? 'taken' : 'recovered') : (!clientSide && attempt === 0 ? 'retry' : 'failed');\nreturn [{ json: { outcome, attempt, listId: list ? String(list.id) : '', createError: describeError(createError), createStatus: status }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "952e02bc-c3ba-5cde-abb4-05dce1abced7",
+      "name": "Recover Or Fail?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        3080,
+        -260
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "d6739b02-3880-5a25-9e87-f1edb9079521",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "taken",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Other run has it"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "bca1329a-5d7e-520b-a355-95738a4be6db",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "recovered",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "List was made"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "903ab4d3-8f1b-53eb-b927-eebba5087965",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "retry",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Try once more"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "dc4fcc06-56f6-581a-aa9e-2a0d99378795",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "No list"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "77967d74-acf9-5578-96a2-6c1939a56e33",
+      "name": "Wait: Template Finishing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3300,
+        -260
+      ],
+      "webhookId": "ffa04143-7cbe-5014-a2cc-576e783233f8",
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ Number($env.CLICKUP_TEMPLATE_WAIT_SECONDS) || 30 }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "00115157-4f61-590e-b311-6276fd826b82",
+      "name": "Another Run Has It",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3300,
+        -460
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "05fa9374-1259-56cf-8381-3b951b4ce7ba",
+      "name": "ClickUp Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        780
+      ],
+      "parameters": {
+        "jsCode": "// Turns an n8n HTTP error into one short line, for example \"401 Token invalid (OAUTH_025)\".\n// n8n puts the HTTP status in error.status and the response body in the message: 401 - \"{\\\"err\\\":...}\".\n// With pagination on, the status is in error.statusCode or error.response.status instead.\n// A timeout has no status, only code ECONNABORTED.\nfunction errorStatus(e) {\n  if (!e || typeof e !== 'object') return 0;\n  const s = Number(e.status || e.httpCode || e.statusCode || e.response?.status || (String(e.message || '').match(/^(\\d{3}) - /) || [])[1] || 0);\n  return Number.isFinite(s) ? s : 0;\n}\n// The API's own answer (ClickUp: {err, ECODE}, Postmark: {ErrorCode, Message}), parsed from wherever n8n put it.\nfunction errorBody(e) {\n  if (!e || typeof e !== 'object') return undefined;\n  let body = e.error ?? e.response?.body;\n  const quoted = String(e.message || '').match(/^\\d{3} - (\"[\\s\\S]*\")$/);\n  if (body === undefined && quoted) { try { body = JSON.parse(quoted[1]); } catch (x) {} }\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (x) {} }\n  return body;\n}\nfunction describeError(e) {\n  if (!e) return 'unknown error';\n  if (typeof e === 'string') return e.slice(0, 300);\n  const status = errorStatus(e);\n  const msg = String(e.message || '');\n  const body = errorBody(e);\n  let detail = '';\n  if (body && typeof body === 'object') {\n    if (body.err) detail = body.err + (body.ECODE ? ' (' + body.ECODE + ')' : '');\n    else if (body.Message) detail = body.Message + (body.ErrorCode !== undefined ? ' (Postmark error ' + body.ErrorCode + ')' : '');\n    else if (body.message) detail = String(body.message);\n  } else if (typeof body === 'string') detail = body.trim();\n  if (!detail) detail = e.code === 'ECONNABORTED' ? `no answer in time (${msg})` : (msg || e.code || 'no details');\n  return ((status ? status + ' ' : '') + detail).replace(/\\s+/g, ' ').trim().slice(0, 300);\n}\n\n// Nothing was created in ClickUp. Report it with the reason. No welcome email goes out.\nconst ctx = $('Check Deal State').first().json;\nconst j = $input.first().json;\nlet step, error;\nif (j.outcome === 'failed') {\n  step = 'ClickUp: Create From Template';\n  error = j.attempt > 0\n    ? `${j.createError}. The call was made twice, and after each try no list for this deal existed.`\n    : `${j.createError}. Checked again afterwards: no list for this deal exists.`;\n} else if ('lists' in j || 'createError' in j) {\n  let first = '';\n  try { first = describeError($('ClickUp: Create From Template').itemMatching(0).json.error); } catch (e) {}\n  step = 'ClickUp: Find List Again';\n  error = `${first ? 'Creating the list failed (' + first + '), then ' : ''}checking for the list failed: ${describeError(j.error)}`;\n} else {\n  step = 'ClickUp: Find Existing List';\n  error = describeError(j.error);\n}\nreturn [{ json: { report: { outcome: 'clickup_failed', deal: ctx.deal, step, error, warnings: ctx.warnings || [] } }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "578fa5a1-42a8-539a-afa3-cbba95604727",
+      "name": "Start Setup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        60
+      ],
+      "parameters": {
+        "jsCode": "// One record per deal in this workflow's static data. n8n saves it at the end of every production run.\n// Records are read and written as own properties only, so a deal id like \"constructor\" or \"__proto__\"\n// is an ordinary key and never an inherited object property.\nconst ownRecord = (deals, id) => (deals && Object.prototype.hasOwnProperty.call(deals, id) ? deals[id] : undefined);\nfunction writeDeals(store, entries) {\n  // Keep it small: forget deals nobody touched for 400 days, and keep at most 5,000.\n  const cutoff = Date.now() - 400 * 864e5;\n  store.deals = Object.fromEntries(entries\n    .filter(([, r]) => new Date(r.updatedAt).getTime() > cutoff)\n    .sort((a, b) => String(b[1].updatedAt).localeCompare(String(a[1].updatedAt)))\n    .slice(0, 5000));\n}\n// A key patched to undefined is removed, so a finished deal does not keep data only a retry needed.\nfunction saveRecord(dealId, patch) {\n  const store = $getWorkflowStaticData('global');\n  const others = Object.entries(store.deals || {}).filter(([k]) => k !== dealId);\n  const rec = { ...(ownRecord(store.deals, dealId) || {}), ...patch, updatedAt: new Date().toISOString() };\n  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];\n  writeDeals(store, [...others, [dealId, rec]]);\n}\nfunction forgetRecord(dealId) {\n  const store = $getWorkflowStaticData('global');\n  writeDeals(store, Object.entries(store.deals || {}).filter(([k]) => k !== dealId));\n}\n\n// The list exists: freshly made, found after a timeout, or left half done by an earlier run.\n// Its id is saved right away, so a failure from here on is finished on this same list next time.\nconst ctx = $('Check Deal State').first().json;\nconst j = $input.first().json;\nconst rec = ctx.record || {};\nconst listId = String(j.listId || j.id || j.list?.id || (ctx.action === 'resume_setup' ? rec.listId : '') || '');\nif (!listId) throw new Error(`ClickUp answered without a list id for deal ${ctx.deal.id}. Check the list in ClickUp before sending the webhook again.`);\nlet retried = false;   // the first template call got no answer or a 5xx, no list existed, and the second call made it\ntry { retried = !j.listId && $('Was It Created?').isExecuted === true; } catch (e) {}\nconst how = ctx.action === 'resume_setup' ? 'resumed' : (j.listId ? 'recovered' : (retried ? 'retried' : 'created'));\nconst listName = (how === 'resumed' && rec.listName) || ctx.deal.listName;\nconst listUrl = `https://app.clickup.com/${ctx.config.workspaceId}/v/li/${listId}`;\nsaveRecord(ctx.deal.id, { status: 'setup_incomplete', listId, listUrl, listName, clientName: ctx.deal.clientName, createdAt: rec.createdAt || new Date().toISOString() });\nreturn [{ json: { deal: ctx.deal, config: ctx.config, warnings: ctx.warnings || [], listId, listUrl, listName, how }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "131830ba-89b1-5024-89d7-7d61aa4de352",
+      "name": "ClickUp: Get Custom Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $json.listId }}/field",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "3d0619af-57f5-506e-abb4-566eb58f5aa2",
+      "name": "ClickUp: Get Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3960,
+        60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $('Start Setup').first().json.listId }}/task",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "include_closed",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000,
+          "pagination": {
+            "pagination": {
+              "paginationMode": "updateAParameterInEachRequest",
+              "parameters": {
+                "parameters": [
+                  {
+                    "type": "qs",
+                    "name": "page",
+                    "value": "={{ $pageCount }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.last_page !== false }}",
+              "limitPagesFetched": true,
+              "maxRequests": 20
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "510e5be5-a6e2-5485-a90a-4a6e63cb476e",
+      "name": "Setup Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        560
+      ],
+      "parameters": {
+        "jsCode": "// Turns an n8n HTTP error into one short line, for example \"401 Token invalid (OAUTH_025)\".\n// n8n puts the HTTP status in error.status and the response body in the message: 401 - \"{\\\"err\\\":...}\".\n// With pagination on, the status is in error.statusCode or error.response.status instead.\n// A timeout has no status, only code ECONNABORTED.\nfunction errorStatus(e) {\n  if (!e || typeof e !== 'object') return 0;\n  const s = Number(e.status || e.httpCode || e.statusCode || e.response?.status || (String(e.message || '').match(/^(\\d{3}) - /) || [])[1] || 0);\n  return Number.isFinite(s) ? s : 0;\n}\n// The API's own answer (ClickUp: {err, ECODE}, Postmark: {ErrorCode, Message}), parsed from wherever n8n put it.\nfunction errorBody(e) {\n  if (!e || typeof e !== 'object') return undefined;\n  let body = e.error ?? e.response?.body;\n  const quoted = String(e.message || '').match(/^\\d{3} - (\"[\\s\\S]*\")$/);\n  if (body === undefined && quoted) { try { body = JSON.parse(quoted[1]); } catch (x) {} }\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (x) {} }\n  return body;\n}\nfunction describeError(e) {\n  if (!e) return 'unknown error';\n  if (typeof e === 'string') return e.slice(0, 300);\n  const status = errorStatus(e);\n  const msg = String(e.message || '');\n  const body = errorBody(e);\n  let detail = '';\n  if (body && typeof body === 'object') {\n    if (body.err) detail = body.err + (body.ECODE ? ' (' + body.ECODE + ')' : '');\n    else if (body.Message) detail = body.Message + (body.ErrorCode !== undefined ? ' (Postmark error ' + body.ErrorCode + ')' : '');\n    else if (body.message) detail = String(body.message);\n  } else if (typeof body === 'string') detail = body.trim();\n  if (!detail) detail = e.code === 'ECONNABORTED' ? `no answer in time (${msg})` : (msg || e.code || 'no details');\n  return ((status ? status + ' ' : '') + detail).replace(/\\s+/g, ' ').trim().slice(0, 300);\n}\n\n// One record per deal in this workflow's static data. n8n saves it at the end of every production run.\n// Records are read and written as own properties only, so a deal id like \"constructor\" or \"__proto__\"\n// is an ordinary key and never an inherited object property.\nconst ownRecord = (deals, id) => (deals && Object.prototype.hasOwnProperty.call(deals, id) ? deals[id] : undefined);\nfunction writeDeals(store, entries) {\n  // Keep it small: forget deals nobody touched for 400 days, and keep at most 5,000.\n  const cutoff = Date.now() - 400 * 864e5;\n  store.deals = Object.fromEntries(entries\n    .filter(([, r]) => new Date(r.updatedAt).getTime() > cutoff)\n    .sort((a, b) => String(b[1].updatedAt).localeCompare(String(a[1].updatedAt)))\n    .slice(0, 5000));\n}\n// A key patched to undefined is removed, so a finished deal does not keep data only a retry needed.\nfunction saveRecord(dealId, patch) {\n  const store = $getWorkflowStaticData('global');\n  const others = Object.entries(store.deals || {}).filter(([k]) => k !== dealId);\n  const rec = { ...(ownRecord(store.deals, dealId) || {}), ...patch, updatedAt: new Date().toISOString() };\n  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];\n  writeDeals(store, [...others, [dealId, rec]]);\n}\nfunction forgetRecord(dealId) {\n  const store = $getWorkflowStaticData('global');\n  writeDeals(store, Object.entries(store.deals || {}).filter(([k]) => k !== dealId));\n}\n\n// The list exists, but its custom fields or tasks could not be read, so nothing in it was changed.\n// ClickUp answers a list that is gone with a 404, or with one of its \"Team not authorized\" codes (OAUTH_023,\n// OAUTH_026, OAUTH_027, OAUTH_029 to OAUTH_045) for an id this token cannot reach. A missing or revoked token has\n// codes of its own (OAUTH_017, OAUTH_019, OAUTH_021, OAUTH_025, OAUTH_077) and never clears a deal.\nfunction listGone(e) {\n  const status = errorStatus(e);\n  const body = errorBody(e) || {};\n  const code = Number((String(body.ECODE || '').match(/^OAUTH_0*(\\d+)$/) || [])[1] || 0);\n  const notAuthorized = code === 23 || code === 26 || code === 27 || (code >= 29 && code <= 45);\n  return status === 404 || ((status === 401 || status === 403) && notAuthorized)\n    || (status >= 400 && status < 500 && status !== 429 && /not found|deleted/i.test(String(body.err || '')));\n}\nconst s = $('Start Setup').first().json;\nconst j = $input.first().json;\nconst step = 'fields' in j ? 'ClickUp: Get Tasks' : 'ClickUp: Get Custom Fields';\nlet note = '';\nif (step === 'ClickUp: Get Custom Fields' && listGone(j.error)) {\n  // The list was deleted in ClickUp, or this token lost access to it. Forget it, so the next webhook starts over.\n  // That next run still looks for a list with the deal id before it creates one, so a list that is only hidden\n  // from the token is never built twice.\n  forgetRecord(s.deal.id);\n  note = 'The list is gone from ClickUp, or this token can no longer open it, so this deal was cleared. Send the same webhook again to build a new list.';\n}\nreturn [{ json: { report: { outcome: 'partial', deal: s.deal, listId: s.listId, listUrl: note ? '' : s.listUrl, listName: s.listName, how: s.how,\n  tasks: [], failures: [{ label: step, error: describeError(j.error) }], warnings: s.warnings, note } }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "a7e3b458-af2d-54f9-99ae-faef3427491d",
+      "name": "Plan Kickoff Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        60
+      ],
+      "parameters": {
+        "jsCode": "// Compares the kickoff tasks from KICKOFF_TASKS_JSON with what the template put in the list:\n//   a task with the same name already there is adjusted (due date, assignees, priority, custom fields),\n//   a task that is missing is created with everything in one call.\n// Because tasks are matched by name, running this again on the same list never duplicates a task.\nconst s = $('Start Setup').first().json;\nconst fields = $('ClickUp: Get Custom Fields').first().json.fields || [];\nconst existing = $('ClickUp: Get Tasks').all().flatMap(page => page.json.tasks || []);\nconst warnings = [...(s.warnings || [])];\nconst norm = v => String(v || '').trim().toLowerCase();\nconst byName = new Map();\nfor (const t of existing) if (!byName.has(norm(t.name))) byName.set(norm(t.name), t);\n\n// Custom field values, converted to what each ClickUp field type expects.\nconst d = s.deal;\nconst wanted = [\n  { name: s.config.fields.package, raw: d.package, kind: 'package', text: d.package },\n  { name: s.config.fields.startDate, raw: d.startYmd, kind: 'date', text: d.startLabel },\n  { name: s.config.fields.dealValue, raw: d.value, kind: 'money', text: d.valueLabel },\n];\nconst values = [];\nfor (const w of wanted) {\n  if (w.raw === null || w.raw === undefined || w.raw === '') continue;\n  const f = fields.find(x => norm(x.name) === norm(w.name));\n  if (!f) { warnings.push(`The list has no custom field called \"${w.name}\", so it was skipped`); continue; }\n  let body = null;\n  if (f.type === 'drop_down' || f.type === 'labels') {\n    const option = (f.type_config?.options || []).find(o => norm(o.name || o.label) === norm(w.raw));\n    if (option) body = { value: f.type === 'labels' ? [option.id] : option.id };\n    else warnings.push(`\"${w.raw}\" is not an option of the \"${f.name}\" field, so it was left empty`);\n  } else if (f.type === 'date' && w.kind === 'date') body = { value: d.startMs, value_options: { time: false } };\n  else if ((f.type === 'currency' || f.type === 'number') && w.kind === 'money') body = { value: d.value };\n  else if (f.type === 'short_text' || f.type === 'text') body = { value: String(w.text) };\n  else warnings.push(`The \"${f.name}\" field is a ${f.type} field, which cannot hold this value, so it was skipped`);\n  if (body) values.push({ id: f.id, name: f.name, body });\n}\n\nconst changes = [];\nfor (const t of d.tasks) {\n  const found = byName.get(norm(t.name));\n  if (found) {\n    const body = { due_date: t.dueMs, due_date_time: false, assignees: { add: t.assignees, rem: [] } };\n    if (t.priority) body.priority = t.priority;\n    changes.push({ op: 'update', taskName: t.name, taskId: String(found.id), url: found.url || '', body });\n    for (const v of values) changes.push({ op: 'field', taskName: t.name, taskId: String(found.id), url: found.url || '', fieldId: v.id, fieldName: v.name, body: v.body });\n  } else {\n    const body = { name: t.name, assignees: t.assignees, due_date: t.dueMs, due_date_time: false, custom_fields: values.map(v => ({ id: v.id, ...v.body })) };\n    if (t.description) body.description = t.description;\n    if (t.priority) body.priority = t.priority;\n    changes.push({ op: 'create', taskName: t.name, listId: s.listId, body });\n  }\n}\nreturn changes.map(c => ({ json: { ...c, planWarnings: warnings }, pairedItem: { item: 0 } }));\n"
+      }
+    },
+    {
+      "id": "427110aa-31fb-559b-ab7c-cbffee3c5c86",
+      "name": "Loop Over Changes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        4400,
+        60
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "63a2c7cc-e98b-5517-b1f8-b9d6e59fd94b",
+      "name": "Route Change",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        4620,
+        -400
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "8954f7fb-9239-5420-80cf-44b471bc8e92",
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "create",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Create"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "2ab5c158-5940-541a-8d05-d42f7f9b22c3",
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "a38a45ae-ed33-5e12-8265-334201d1763f",
+                    "leftValue": "={{ $json.op }}",
+                    "rightValue": "field",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Field"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1be60efa-1b9a-5931-9476-7b3af6edf9cc",
+      "name": "ClickUp: Create Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        -580
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v2/list/{{ $json.listId }}/task",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c8809553-53ab-5dfb-b1d8-19b5c0da338d",
+      "name": "ClickUp: Update Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        -400
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $json.taskId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "1fae7dd4-aa78-5d8d-9094-82e3cf9e50fb",
+      "name": "ClickUp: Set Custom Field",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        -220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.clickup.com/api/v2/task/{{ $json.taskId }}/field/{{ $json.fieldId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.CLICKUP_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "c24f637e-a00c-59cf-825c-92b5043dabb5",
+      "name": "Record Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        -230
+      ],
+      "parameters": {
+        "jsCode": "// Turns an n8n HTTP error into one short line, for example \"401 Token invalid (OAUTH_025)\".\n// n8n puts the HTTP status in error.status and the response body in the message: 401 - \"{\\\"err\\\":...}\".\n// With pagination on, the status is in error.statusCode or error.response.status instead.\n// A timeout has no status, only code ECONNABORTED.\nfunction errorStatus(e) {\n  if (!e || typeof e !== 'object') return 0;\n  const s = Number(e.status || e.httpCode || e.statusCode || e.response?.status || (String(e.message || '').match(/^(\\d{3}) - /) || [])[1] || 0);\n  return Number.isFinite(s) ? s : 0;\n}\n// The API's own answer (ClickUp: {err, ECODE}, Postmark: {ErrorCode, Message}), parsed from wherever n8n put it.\nfunction errorBody(e) {\n  if (!e || typeof e !== 'object') return undefined;\n  let body = e.error ?? e.response?.body;\n  const quoted = String(e.message || '').match(/^\\d{3} - (\"[\\s\\S]*\")$/);\n  if (body === undefined && quoted) { try { body = JSON.parse(quoted[1]); } catch (x) {} }\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (x) {} }\n  return body;\n}\nfunction describeError(e) {\n  if (!e) return 'unknown error';\n  if (typeof e === 'string') return e.slice(0, 300);\n  const status = errorStatus(e);\n  const msg = String(e.message || '');\n  const body = errorBody(e);\n  let detail = '';\n  if (body && typeof body === 'object') {\n    if (body.err) detail = body.err + (body.ECODE ? ' (' + body.ECODE + ')' : '');\n    else if (body.Message) detail = body.Message + (body.ErrorCode !== undefined ? ' (Postmark error ' + body.ErrorCode + ')' : '');\n    else if (body.message) detail = String(body.message);\n  } else if (typeof body === 'string') detail = body.trim();\n  if (!detail) detail = e.code === 'ECONNABORTED' ? `no answer in time (${msg})` : (msg || e.code || 'no details');\n  return ((status ? status + ' ' : '') + detail).replace(/\\s+/g, ' ').trim().slice(0, 300);\n}\n\n// One result per change. The change is read back from Route Change, because the ClickUp answer replaces the item.\nreturn $input.all().map((item, i) => {\n  const change = $('Route Change').itemMatching(i).json;\n  const r = item.json;\n  const ok = !r.error;\n  return { json: { op: change.op, taskName: change.taskName, fieldName: change.fieldName || '', taskId: String(r.id || change.taskId || ''),\n    url: r.url || change.url || '', ok, error: ok ? '' : describeError(r.error) }, pairedItem: { item: i } };\n});\n"
+      }
+    },
+    {
+      "id": "9b1b0c9e-e6e4-5d55-90d2-3b76e2f60b9b",
+      "name": "Summarize Setup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        60
+      ],
+      "parameters": {
+        "jsCode": "// One record per deal in this workflow's static data. n8n saves it at the end of every production run.\n// Records are read and written as own properties only, so a deal id like \"constructor\" or \"__proto__\"\n// is an ordinary key and never an inherited object property.\nconst ownRecord = (deals, id) => (deals && Object.prototype.hasOwnProperty.call(deals, id) ? deals[id] : undefined);\nfunction writeDeals(store, entries) {\n  // Keep it small: forget deals nobody touched for 400 days, and keep at most 5,000.\n  const cutoff = Date.now() - 400 * 864e5;\n  store.deals = Object.fromEntries(entries\n    .filter(([, r]) => new Date(r.updatedAt).getTime() > cutoff)\n    .sort((a, b) => String(b[1].updatedAt).localeCompare(String(a[1].updatedAt)))\n    .slice(0, 5000));\n}\n// A key patched to undefined is removed, so a finished deal does not keep data only a retry needed.\nfunction saveRecord(dealId, patch) {\n  const store = $getWorkflowStaticData('global');\n  const others = Object.entries(store.deals || {}).filter(([k]) => k !== dealId);\n  const rec = { ...(ownRecord(store.deals, dealId) || {}), ...patch, updatedAt: new Date().toISOString() };\n  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];\n  writeDeals(store, [...others, [dealId, rec]]);\n}\nfunction forgetRecord(dealId) {\n  const store = $getWorkflowStaticData('global');\n  writeDeals(store, Object.entries(store.deals || {}).filter(([k]) => k !== dealId));\n}\n\n// All changes are done (or failed after their retries). Complete means every single change worked.\nconst s = $('Start Setup').first().json;\nconst planWarnings = $('Plan Kickoff Tasks').first().json.planWarnings || [];\nconst results = $input.all().map(i => i.json);\nconst failures = results.filter(r => !r.ok).map(r => ({\n  label: `\"${r.taskName}\": ${r.op === 'create' ? 'create task' : r.op === 'update' ? 'update task' : 'set \"' + r.fieldName + '\"'}`,\n  error: r.error,\n}));\nconst tasks = s.deal.tasks.map(t => {\n  const mine = results.filter(r => r.taskName === t.name);\n  const main = mine.find(r => r.op !== 'field');\n  return { name: t.name, dueYmd: t.dueYmd, dueLabel: t.dueLabel, dueLong: t.dueLong, inEmail: t.inEmail, emailLabel: t.emailLabel,\n           source: main && main.op === 'create' ? 'created' : (s.how === 'resumed' ? 'existing' : 'template'), exists: Boolean(main && (main.ok || main.op === 'update')),\n           ok: Boolean(main && main.ok) && mine.every(r => r.ok), url: (main && main.url) || '' };\n});\nconst complete = failures.length === 0;\nconst setup = { tasks, warnings: planWarnings, startLabel: s.deal.startLabel, startLong: s.deal.startLong };\nsaveRecord(s.deal.id, complete ? { status: 'email_pending', setup, setupDoneAt: new Date().toISOString(), lastFailures: undefined }\n                               : { status: 'setup_incomplete', lastFailures: failures });\nconst report = { outcome: complete ? 'ready' : 'partial', deal: s.deal, listId: s.listId, listUrl: s.listUrl, listName: s.listName, how: s.how,\n                 tasks, failures, warnings: planWarnings, startLabel: s.deal.startLabel };\nreturn [{ json: { complete, report, setup }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "7cb30622-0cbc-51fe-9696-c18c7f90300d",
+      "name": "Setup Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "39773152-611f-520a-96ff-b10d54d4a43b",
+              "leftValue": "={{ $json.complete }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5caffdbb-ac3a-59d8-a99b-8b5d358ae64e",
+      "name": "Build Welcome Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        160
+      ],
+      "parameters": {
+        "jsCode": "// The welcome email, sent through Postmark. Only tasks marked \"in_email\" in KICKOFF_TASKS_JSON are listed.\nconst ctx = $('Check Deal State').first().json;\nconst rec = ctx.record || {};\nconst j = $input.first().json;\nconst report = j.report ? { ...j.report } : {\n  outcome: 'ready', how: 'email_retry', deal: ctx.deal, listId: rec.listId, listUrl: rec.listUrl, listName: rec.listName,\n  tasks: rec.setup?.tasks || [], failures: [], warnings: [], startLabel: rec.setup?.startLabel || ctx.deal.startLabel,\n};\nconst d = ctx.deal;                        // the newest payload, so an email added in the CRM later is used\nconst cfg = ctx.config;\nconst setup = j.setup || rec.setup || {};\nconst startLong = setup.startLong || d.startLong;\nconst html = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst biz = cfg.businessName;\nconst steps = report.tasks.filter(t => t.inEmail).map(t => ({ when: t.dueLong, what: t.emailLabel || t.name }));\nconst hi = d.firstName ? `Hi ${d.firstName},` : 'Hi there,';\nconst thanks = `Thank you for choosing ${biz || 'us'}. We are excited to get started${d.package ? ` on the ${d.package} package` : ''} for ${d.clientName}.`;\nconst sign = biz ? `The ${biz} team` : 'The team';\n\nconst textBody = [hi, '', thanks, '', `Your onboarding starts on ${startLong}.${steps.length ? ' Here is what happens next:' : ''}`,\n  ...(steps.length ? ['', ...steps.map(s => `${s.when}: ${s.what}`)] : []),\n  ...(cfg.bookingUrl ? ['', `Book a time for your kickoff call here: ${cfg.bookingUrl}`] : []),\n  '', 'If you have any questions, just reply to this email.', '', 'Talk soon,', sign].join('\\n');\nconst htmlBody = `<html><body style=\"font-family: Arial, sans-serif; font-size: 15px; line-height: 1.5; color: #222;\">` +\n  `<p>${html(hi)}</p><p>${html(thanks)}</p><p>Your onboarding starts on <strong>${html(startLong)}</strong>.${steps.length ? ' Here is what happens next:' : ''}</p>` +\n  (steps.length ? `<ul>${steps.map(s => `<li><strong>${html(s.when)}:</strong> ${html(s.what)}</li>`).join('')}</ul>` : '') +\n  (cfg.bookingUrl ? `<p><a href=\"${html(cfg.bookingUrl)}\">Book a time for your kickoff call</a></p>` : '') +\n  `<p>If you have any questions, just reply to this email.</p><p>Talk soon,<br>${html(sign)}</p></body></html>`;\n\nconst email = {\n  From: cfg.from, To: d.email, Subject: `Welcome aboard${d.firstName ? ', ' + d.firstName : ''}! Your onboarding starts ${report.startLabel || d.startLabel}`,\n  TextBody: textBody, HtmlBody: htmlBody, Tag: 'client-onboarding', Metadata: { deal_id: d.id }, MessageStream: cfg.messageStream,\n};\nif (cfg.replyTo) email.ReplyTo = cfg.replyTo;\nif (!d.email) report.emailStatus = 'skipped';\nreturn [{ json: { sendEmail: Boolean(d.email), email, report }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "382d3e8e-c368-5fe4-944a-cb07171e2e36",
+      "name": "Send Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5500,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "9bc52edb-64e4-533c-b890-aae2d1496eac",
+              "leftValue": "={{ $json.sendEmail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3d96ce29-32ea-5b70-8e35-f9eba3ac7bca",
+      "name": "Postmark: Send Welcome Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5720,
+        -40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.postmarkapp.com/email",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Postmark-Server-Token",
+              "value": "={{ $env.POSTMARK_SERVER_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.email) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "719a719e-874c-5ea4-976a-fe502dedf364",
+      "name": "Record Email Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        -40
+      ],
+      "parameters": {
+        "jsCode": "// Turns an n8n HTTP error into one short line, for example \"401 Token invalid (OAUTH_025)\".\n// n8n puts the HTTP status in error.status and the response body in the message: 401 - \"{\\\"err\\\":...}\".\n// With pagination on, the status is in error.statusCode or error.response.status instead.\n// A timeout has no status, only code ECONNABORTED.\nfunction errorStatus(e) {\n  if (!e || typeof e !== 'object') return 0;\n  const s = Number(e.status || e.httpCode || e.statusCode || e.response?.status || (String(e.message || '').match(/^(\\d{3}) - /) || [])[1] || 0);\n  return Number.isFinite(s) ? s : 0;\n}\n// The API's own answer (ClickUp: {err, ECODE}, Postmark: {ErrorCode, Message}), parsed from wherever n8n put it.\nfunction errorBody(e) {\n  if (!e || typeof e !== 'object') return undefined;\n  let body = e.error ?? e.response?.body;\n  const quoted = String(e.message || '').match(/^\\d{3} - (\"[\\s\\S]*\")$/);\n  if (body === undefined && quoted) { try { body = JSON.parse(quoted[1]); } catch (x) {} }\n  if (typeof body === 'string') { try { body = JSON.parse(body); } catch (x) {} }\n  return body;\n}\nfunction describeError(e) {\n  if (!e) return 'unknown error';\n  if (typeof e === 'string') return e.slice(0, 300);\n  const status = errorStatus(e);\n  const msg = String(e.message || '');\n  const body = errorBody(e);\n  let detail = '';\n  if (body && typeof body === 'object') {\n    if (body.err) detail = body.err + (body.ECODE ? ' (' + body.ECODE + ')' : '');\n    else if (body.Message) detail = body.Message + (body.ErrorCode !== undefined ? ' (Postmark error ' + body.ErrorCode + ')' : '');\n    else if (body.message) detail = String(body.message);\n  } else if (typeof body === 'string') detail = body.trim();\n  if (!detail) detail = e.code === 'ECONNABORTED' ? `no answer in time (${msg})` : (msg || e.code || 'no details');\n  return ((status ? status + ' ' : '') + detail).replace(/\\s+/g, ' ').trim().slice(0, 300);\n}\n\n// One record per deal in this workflow's static data. n8n saves it at the end of every production run.\n// Records are read and written as own properties only, so a deal id like \"constructor\" or \"__proto__\"\n// is an ordinary key and never an inherited object property.\nconst ownRecord = (deals, id) => (deals && Object.prototype.hasOwnProperty.call(deals, id) ? deals[id] : undefined);\nfunction writeDeals(store, entries) {\n  // Keep it small: forget deals nobody touched for 400 days, and keep at most 5,000.\n  const cutoff = Date.now() - 400 * 864e5;\n  store.deals = Object.fromEntries(entries\n    .filter(([, r]) => new Date(r.updatedAt).getTime() > cutoff)\n    .sort((a, b) => String(b[1].updatedAt).localeCompare(String(a[1].updatedAt)))\n    .slice(0, 5000));\n}\n// A key patched to undefined is removed, so a finished deal does not keep data only a retry needed.\nfunction saveRecord(dealId, patch) {\n  const store = $getWorkflowStaticData('global');\n  const others = Object.entries(store.deals || {}).filter(([k]) => k !== dealId);\n  const rec = { ...(ownRecord(store.deals, dealId) || {}), ...patch, updatedAt: new Date().toISOString() };\n  for (const k of Object.keys(rec)) if (rec[k] === undefined) delete rec[k];\n  writeDeals(store, [...others, [dealId, rec]]);\n}\nfunction forgetRecord(dealId) {\n  const store = $getWorkflowStaticData('global');\n  writeDeals(store, Object.entries(store.deals || {}).filter(([k]) => k !== dealId));\n}\n\n// Postmark answers ErrorCode 0 and a MessageID when it accepted the email. Anything else is a failure,\n// and the deal stays \"email pending\", so sending the same webhook again retries only the email.\n// Once the email is out, the copy of the setup kept for that retry is dropped, so a finished deal stays small.\nconst b = $('Build Welcome Email').first().json;\nconst r = $input.first().json;\nconst sent = !r.error && Number(r.ErrorCode) === 0 && Boolean(r.MessageID);\nconst emailError = sent ? '' : describeError(r.error || r);\nsaveRecord(b.report.deal.id, sent ? { status: 'done', emailSentAt: new Date().toISOString(), messageId: r.MessageID, setup: undefined, lastEmailError: undefined }\n                                  : { status: 'email_pending', lastEmailError: emailError });\nreturn [{ json: { report: { ...b.report, emailTo: b.email.To, emailStatus: sent ? 'sent' : 'failed', messageId: sent ? r.MessageID : '', emailError } }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "5853df1a-ae9f-5552-a152-9f9f6afc8f26",
+      "name": "Build Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        320
+      ],
+      "parameters": {
+        "jsCode": "// One Slack message per run that did something: ready, partly done, failed, or \"already exists\".\nconst r = $input.first().json.report;\nconst d = r.deal || {};\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst client = esc(d.clientName || d.id);\nconst facts = [`Deal ${esc(d.id)}`, d.package && esc(d.package), d.valueLabel && esc(d.valueLabel),\n               (r.startLabel || d.startLabel) && `starts ${esc(r.startLabel || d.startLabel)}`].filter(Boolean).join(' · ');\nconst link = r.listUrl ? `ClickUp: <${r.listUrl}|${esc(r.listName)}>` : '';\nconst taskLine = t => `• ${esc(t.name)}, due ${esc(t.dueLabel)}` +\n  (t.source === 'template' ? ' (from the template)' : t.source === 'existing' ? ' (already in the list)' : '');\nconst warnings = (r.warnings || []).map(w => `:warning: ${esc(w)}`);\nlet lines, failed = false, summary;\n\nif (r.outcome === 'ready') {\n  failed = r.emailStatus === 'failed';\n  const title = r.how === 'email_retry'\n    ? (failed ? `:warning: *Welcome email failed again: ${client}*` : `:white_check_mark: *Welcome email sent: ${client}*`)\n    : (failed ? `:warning: *Onboarding ready, but the welcome email failed: ${client}*` : `:white_check_mark: *Onboarding ready: ${client}*`);\n  lines = [title, facts, link];\n  if (r.how === 'recovered') lines.push(':information_source: ClickUp needed longer than the timeout to build the list. The workflow found the list and finished the setup on it.');\n  if (r.how === 'retried') lines.push(':information_source: The first call to ClickUp failed and no list had been made, so the workflow tried once more.');\n  if (r.how === 'resumed') lines.push(':information_source: Picked up where the last run stopped. Nothing was created twice.');\n  if (r.how !== 'email_retry') lines.push('Kickoff tasks:', ...r.tasks.map(taskLine));\n  if (r.emailStatus === 'sent') lines.push(`Welcome email sent to ${esc(r.emailTo)}`);\n  if (r.emailStatus === 'skipped') lines.push(':warning: No valid email address on the deal, so no welcome email was sent. Add it in the CRM and send the webhook again to send it.');\n  if (failed) lines.push(`Email to ${esc(r.emailTo)} failed: ${esc(r.emailError)}`,\n    'The ClickUp project is kept. Send the welcome email by hand, or fix the cause and send the same webhook again to retry only the email.');\n  summary = failed ? `the ClickUp project is ready but the welcome email failed (${r.emailError})` : 'ready';\n} else if (r.outcome === 'partial') {\n  failed = true;\n  const done = (r.tasks || []).filter(t => t.exists);\n  lines = [`:warning: *Onboarding only partly set up: ${client}*`, facts, link];\n  if (done.length) lines.push('In the list now:', ...done.map(taskLine));\n  lines.push('Failed:', ...r.failures.map(f => `• ${esc(f.label)}: ${esc(f.error)}`));\n  lines.push(r.note ? esc(r.note) : 'The welcome email has NOT been sent. Fix the cause, then send the same webhook again: the workflow continues on this list and only does what is missing.');\n  summary = `the setup is incomplete (${r.failures.length} change${r.failures.length === 1 ? '' : 's'} failed)`;\n} else if (r.outcome === 'clickup_failed') {\n  failed = true;\n  lines = [`:x: *ClickUp project NOT created: ${client}*`, facts, `Step: ${esc(r.step)}`, `Error: ${esc(r.error)}`,\n           'No welcome email was sent. Fix the cause, then send the same webhook again.'];\n  summary = `no ClickUp project was created (${r.step}: ${r.error})`;\n} else {\n  // The list was made by hand, or by a run whose record was lost. It may be half finished, so the team is told\n  // what to check instead of the workflow changing a list it did not set up.\n  lines = [`:information_source: *A ClickUp list already exists for ${client}*`, facts, link,\n           'Nothing was created or changed and no welcome email was sent. This workflow has no record of setting up that list, ' +\n           'so check that its kickoff tasks are in place and send the welcome email by hand if the client has not had it.'];\n  summary = 'already had a list';\n}\nconst text = [...lines, ...warnings].filter(Boolean).join('\\n');\nconst stopMessage = `Onboarding for ${d.clientName || 'a client'} (deal ${d.id}): ${summary}. The details were posted to Slack.`;\nreturn [{ json: { text, failed, stopMessage }, pairedItem: { item: 0 } }];\n"
+      }
+    },
+    {
+      "id": "7c409f2c-92ba-5df4-8c3c-f917e4afc35f",
+      "name": "Slack: Post Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6380,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.text, unfurl_links: false }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d2321736-b9c3-5d9d-8498-1c889685dda7",
+      "name": "Stop: Slack Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        6380,
+        560
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Slack did not accept the update, so here it is: ' + $('Build Slack Message').first().json.text }}"
+      }
+    },
+    {
+      "id": "fb30bca3-eb4f-5dd8-a0c0-0977c12fe594",
+      "name": "Run Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "8c05bae0-6fac-51c4-80b9-0035d662f021",
+              "leftValue": "={{ $('Build Slack Message').first().json.failed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e6ff5b78-ae79-5f29-be4d-c539daeea02c",
+      "name": "Stop: Onboarding Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        6820,
+        200
+      ],
+      "parameters": {
+        "errorMessage": "={{ $('Build Slack Message').first().json.stopMessage }}"
+      }
+    },
+    {
+      "id": "a6567c55-b1fb-54b3-a3f2-657258e315fc",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6820,
+        440
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Deal Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Secret": {
+      "main": [
+        [
+          {
+            "node": "Secret Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Secret Valid?": {
+      "main": [
+        [
+          {
+            "node": "Normalize Deal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Unauthorized": {
+      "main": [
+        [
+          {
+            "node": "Stop: Bad Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Deal": {
+      "main": [
+        [
+          {
+            "node": "Valid Deal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Deal?": {
+      "main": [
+        [
+          {
+            "node": "Check Deal State",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Rejected": {
+      "main": [
+        [
+          {
+            "node": "Stop: Rejected Deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Deal State": {
+      "main": [
+        [
+          {
+            "node": "Respond: Received",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond: Received": {
+      "main": [
+        [
+          {
+            "node": "Route by State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by State": {
+      "main": [
+        [
+          {
+            "node": "ClickUp: Find Existing List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Setup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Setup Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing To Do",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Find Existing List": {
+      "main": [
+        [
+          {
+            "node": "List Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Exists?": {
+      "main": [
+        [
+          {
+            "node": "Adopt Existing List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp: Create From Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adopt Existing List": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Create From Template": {
+      "main": [
+        [
+          {
+            "node": "Start Setup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp: Find List Again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Find List Again": {
+      "main": [
+        [
+          {
+            "node": "Was It Created?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was It Created?": {
+      "main": [
+        [
+          {
+            "node": "Recover Or Fail?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recover Or Fail?": {
+      "main": [
+        [
+          {
+            "node": "Another Run Has It",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait: Template Finishing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp: Create From Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait: Template Finishing": {
+      "main": [
+        [
+          {
+            "node": "Start Setup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp Failed": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Setup": {
+      "main": [
+        [
+          {
+            "node": "ClickUp: Get Custom Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Get Custom Fields": {
+      "main": [
+        [
+          {
+            "node": "ClickUp: Get Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Setup Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Get Tasks": {
+      "main": [
+        [
+          {
+            "node": "Plan Kickoff Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Setup Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup Failed": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Kickoff Tasks": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Changes": {
+      "main": [
+        [
+          {
+            "node": "Summarize Setup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route Change",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Change": {
+      "main": [
+        [
+          {
+            "node": "ClickUp: Create Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp: Update Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ClickUp: Set Custom Field",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Create Task": {
+      "main": [
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Update Task": {
+      "main": [
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ClickUp: Set Custom Field": {
+      "main": [
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Result": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Changes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Setup": {
+      "main": [
+        [
+          {
+            "node": "Setup Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup Complete?": {
+      "main": [
+        [
+          {
+            "node": "Build Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email?": {
+      "main": [
+        [
+          {
+            "node": "Postmark: Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postmark: Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Record Email Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record Email Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Email Result": {
+      "main": [
+        [
+          {
+            "node": "Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack Message": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Post Update": {
+      "main": [
+        [
+          {
+            "node": "Run Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Slack Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Failed?": {
+      "main": [
+        [
+          {
+            "node": "Stop: Onboarding Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
